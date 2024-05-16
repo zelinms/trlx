@@ -536,6 +536,9 @@ class AccelerateRLTrainer(BaseRLTrainer):
                         self.iter_count = state["iter_count"]
         else:
             results = self.evaluate()
+            for k in results:
+                if isinstance(results[k], torch.Tensor):
+                    results[k] = results[k].item()
             self.accelerator.log(results, step=self.iter_count)
 
         tbar = logging.tqdm(
@@ -641,6 +644,9 @@ class AccelerateRLTrainer(BaseRLTrainer):
                     tbar.set_description(f"[{desc}]")
                     tbar.update()
 
+                    for k in stats:
+                        if isinstance(stats[k], torch.Tensor):
+                            stats[k] = stats[k].item()
                     self.accelerator.log(stats, step=self.iter_count)
 
                     if self.iter_count >= self.total_steps:

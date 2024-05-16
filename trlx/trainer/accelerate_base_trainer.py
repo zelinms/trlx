@@ -127,7 +127,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
                     project_name=self.config.train.project_name,
                     config=config_dict_flat,
                 )
-            elif config.train.tracker is None:
+            elif config.train.tracker is None or config.train.tracker == "mlflow":
                 self.accelerator.init_trackers(project_name=self.config.train.project_name)
             else:
                 raise ValueError(

@@ -1607,7 +1607,7 @@ def hf_get_branch_class(
     ]
     opt_branch_supported_archs = ["OPTForCausalLM"]
     bloom_branch_supported_archs = ["BloomModel", "BloomForCausalLM"]
-    llama_branch_supported_archs = ["LlamaModel", "LlamaForCausalLM"]
+    llama_branch_supported_archs = ["LlamaModel", "LlamaForCausalLM", "Phi3ForCausalLM"]
     bigcode_branch_supported_archs = ["GPTBigCodeModel", "GPTBigCodeForCausalLM"]
     arch = config.architectures[0]
     if arch in gpt_branch_supported_archs:

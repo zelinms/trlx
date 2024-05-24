@@ -1,6 +1,7 @@
 import contextlib
 import json
 import time
+from datetime import datetime
 import os
 import sys
 from abc import abstractmethod
@@ -509,7 +510,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
                         x[col] = row[i]
                     json_contents.append(json.dumps(x))
                 
-                timestr = time.strftime("%Y%m%d-%H%M%S")
+                timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
                 mlflow.log_text(str(rich_table), f"eval_{timestr}.txt")
                 mlflow.log_text("\n".join(json_contents), f"eval_{timestr}.jsonl")
 

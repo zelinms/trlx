@@ -1,5 +1,6 @@
 import contextlib
 import json
+import time
 import os
 import sys
 from abc import abstractmethod
@@ -493,8 +494,24 @@ class AccelerateRLTrainer(BaseRLTrainer):
 
             if self.config.train.tracker == "wandb":
                 import wandb
-
                 stats["samples"] = wandb.Table(columns, rows)
+            elif self.config.train.tracker == "mlflow":
+                import mlflow
+                
+                rich_table = Table(*columns, title=table_title, show_lines=True)
+                for ix in range(len(rows)):
+                    rich_table.add_row(*[str(significant(x)) for x in rows[ix]])
+
+                json_contents = []
+                for row in rows:
+                    x = {}
+                    for i, col in enumerate(columns):
+                        x[col] = row[i]
+                    json_contents.append(json.dumps(x))
+                
+                timestr = time.strftime("%Y%m%d-%H%M%S")
+                mlflow.log_text(str(rich_table), f"eval_{timestr}.txt")
+                mlflow.log_text("\n".join(json_contents), f"eval_{timestr}.jsonl")
 
         self.nth_evaluation += 1
         return stats

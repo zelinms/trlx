@@ -498,10 +498,6 @@ class AccelerateRLTrainer(BaseRLTrainer):
                 stats["samples"] = wandb.Table(columns, rows)
             elif self.config.train.tracker == "mlflow":
                 import mlflow
-                
-                rich_table = Table(*columns, title=table_title, show_lines=True)
-                for ix in range(len(rows)):
-                    rich_table.add_row(*[str(significant(x)) for x in rows[ix]])
 
                 json_contents = []
                 for row in rows:
@@ -511,8 +507,17 @@ class AccelerateRLTrainer(BaseRLTrainer):
                     json_contents.append(json.dumps(x))
                 
                 timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
-                mlflow.log_text(str(rich_table), f"eval_{timestr}.txt")
+                
                 mlflow.log_text("\n".join(json_contents), f"eval_{timestr}.jsonl")
+
+                rich_table = Table(*columns, title=table_title, show_lines=True)
+                for ix in range(len(rows)):
+                    rich_table.add_row(*[str(significant(x)) for x in rows[ix]])
+                rich_tale_file_name = f"eval_{timestr}.txt"
+                with open(rich_tale_file_name, "wt") as report_file:
+                    console = Console(file=report_file)
+                    console.print(rich_table)
+                mlflow.log_artifact(rich_tale_file_name)
 
         self.nth_evaluation += 1
         return stats

@@ -159,6 +159,12 @@ class PromptPipeline(BasePipeline):
             for tokens, mask, metadata in zip(prompts_tokens, attention_mask, metadata)
         ]
 
+        if os.environ.get("RANK", "0") == "0":
+            print("trlx PromptPipeline is created.")
+            print(f"max_length={max_prompt_length}")
+            print(f"prompts[0]={prompts[0]}")
+            print(f"input_ids[0]={prompts_tokens[0]}")
+
     def __getitem__(self, ix: int):
         return self.prompts[ix]
 

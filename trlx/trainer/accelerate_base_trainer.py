@@ -161,6 +161,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
                 freeze_bottom_seq2seq_layers(model.base_model, self.config.model.num_layers_unfrozen)
             else:
                 freeze_bottom_causal_layers(model.base_model, self.config.model.num_layers_unfrozen)
+            model.base_model.gradient_checkpointing_enable()
         else:
             if self.accelerator.is_main_process and hasattr(model.base_model, "print_trainable_parameters"):
                 model.base_model.print_trainable_parameters()

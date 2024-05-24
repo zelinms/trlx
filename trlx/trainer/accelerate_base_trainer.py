@@ -507,7 +507,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
                     for i, col in enumerate(columns):
                         x[col] = row[i]
                         print_contents.append(f"---------- {col} ----------")
-                        print_contents.append(row[i])
+                        print_contents.append(str(row[i]))
                     print_contents.append("==============================")
                     json_contents.append(json.dumps(x))
                 

@@ -514,7 +514,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
                 for ix in range(len(rows)):
                     rich_table.add_row(*[str(significant(x)) for x in rows[ix]])
                 rich_tale_file_name = f"eval_{timestr}.txt"
-                with open(rich_tale_file_name, "wt") as report_file:
+                with open(rich_tale_file_name, "wt", encoding="utf-8") as report_file:
                     console = Console(file=report_file)
                     console.print(rich_table)
                 mlflow.log_artifact(rich_tale_file_name)

@@ -224,8 +224,12 @@ class AccelerateRLTrainer(BaseRLTrainer):
             else:
                 output_start_ix = prompt_size
 
-            str_prompt = self.tokenizer.decode(prompt[:prompt_size], skip_special_tokens=True)
-            str_output = self.tokenizer.decode(sample[output_start_ix:], skip_special_tokens=True)
+            str_prompt = self.tokenizer.decode(prompt[:prompt_size], skip_special_tokens=False)
+            str_output = self.tokenizer.decode(sample[output_start_ix:], skip_special_tokens=False)
+
+            while str_prompt.startswith(self.tokenizer.pad_token):
+                str_prompt = str_prompt[len(self.tokenizer.pad_token) :]
+
             # Trim outputs up to `self.stop_sequences` if any are present
             trimmed = False
             if self.stop_sequences:
@@ -502,12 +506,16 @@ class AccelerateRLTrainer(BaseRLTrainer):
 
                 json_contents = []
                 print_contents = []
-                for row in rows:
+                for row_index, row in enumerate(rows):
                     x = {}
                     for i, col in enumerate(columns):
                         x[col] = row[i]
                         print_contents.append(f"---------- {col} ----------")
                         print_contents.append(str(row[i]))
+                        if col == "output" and "original_output" in metadata:
+                            x["original_output"] = metadata["original_output"][row_index]
+                            print_contents.append(f"---------- original_output ----------")
+                            print_contents.append(metadata["original_output"][row_index])
                     print_contents.append("==============================")
                     json_contents.append(json.dumps(x))
                 

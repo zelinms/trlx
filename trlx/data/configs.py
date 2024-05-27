@@ -90,6 +90,7 @@ class TokenizerConfig:
     tokenizer_path: str
     padding_side: str = "left"
     truncation_side: str = "right"
+    kl_calculation_suffix: str = None
     tokenizer_extra_configs: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod

@@ -31,6 +31,8 @@ from trlx.utils.modeling import RunningMoments, gather_dict, logprobs_of_labels
 
 logger = logging.get_logger(__name__)
 
+PAD_ID = -100
+
 
 @register_trainer
 class AcceleratePPOTrainer(AccelerateRLTrainer):
@@ -57,7 +59,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
 
         # Setup the rollout store
         # Rollouts contain the prompt & response, log probs, values and rewards - from each rollout
-        self.store = PPORolloutStorage(self.tokenizer.pad_token_id, self.tokenizer.padding_side)
+        self.store = PPORolloutStorage(PAD_ID, self.tokenizer.padding_side)
 
         # Create the rollout store dataloader (for batching up rollouts)
         # TODO (jon-tow): This is only used to satisfy to `accelerator.prepare` call constraint below - remove in future
@@ -82,6 +84,11 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             self.kl_ctl = AdaptiveKLController(config.method.init_kl_coef, config.method.target, config.method.horizon)
         else:
             self.kl_ctl = FixedKLController(config.method.init_kl_coef)
+
+        if config.tokenizer.kl_calculation_suffix:
+            self.kl_calculation_suffix = config.tokenizer.kl_calculation_suffix
+        else:
+            self.kl_calculation_suffix = self.tokenizer.eos_token
 
         # Create the parameters for the Hugging Face language model's generator
         # method (that generates new tokens from a prompt).
@@ -116,13 +123,30 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
         if issubclass(type(config.model.model_path), transformers.PretrainedConfig):
             from_fn = model_class.from_config
 
-        return from_fn(
-            config.model.model_path,
-            num_layers_unfrozen=config.model.num_layers_unfrozen,
-            num_value_layers_unfrozen=config.method.num_value_layers_unfrozen,
-            peft_config=self.config.model.peft_config,
-            **self.config.model.model_extra_configs,
-        )
+        res = None
+        if self.accelerator.is_local_main_process:
+            res = from_fn(
+                config.model.model_path,
+                num_layers_unfrozen=config.model.num_layers_unfrozen,
+                num_value_layers_unfrozen=config.method.num_value_layers_unfrozen,
+                peft_config=self.config.model.peft_config,
+                **self.config.model.model_extra_configs,
+            )
+        
+        torch.distributed.barrier()
+
+        if not res:
+            res = from_fn(
+                config.model.model_path,
+                num_layers_unfrozen=config.model.num_layers_unfrozen,
+                num_value_layers_unfrozen=config.method.num_value_layers_unfrozen,
+                peft_config=self.config.model.peft_config,
+                **self.config.model.model_extra_configs,
+            )
+        
+        return res
+
+
 
     def loss(self, batch: PPORLBatch) -> Tuple[float, Dict[str, Any]]:
         """Computes loss on a batch of data and returns statistics
@@ -174,7 +198,8 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             )
         else:
             tokens = torch.cat((query_tensors, response_tensors), dim=1)
-            attention_mask = tokens.not_equal(self.tokenizer.pad_token_id).long().to(tokens.device)
+            attention_mask = tokens.not_equal(PAD_ID).long().to(tokens.device)
+            tokens = torch.where(tokens == PAD_ID, self.tokenizer.pad_token_id, tokens)
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             outputs = self.model(tokens, attention_mask, return_dict=True, position_ids=position_ids)
@@ -340,7 +365,9 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                 scores = all_scores[0].clone().detach()
             scores_mask = scores != -np.inf
 
-            str_samples, str_prompts, str_outputs = self.decode(prompt_tensors, samples, append_eos_token=True)
+            str_samples, str_prompts, str_outputs = self.decode(prompt_tensors, samples, append_eos_token=False)
+
+            str_outputs = [f"{str_output}{self.kl_calculation_suffix}" for str_output in str_outputs]
 
             # Pad the sample outputs
             outputs = self.tokenizer(str_outputs).input_ids
@@ -355,11 +382,18 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                 F.pad(
                     output,
                     (0, maxsize - len(output)),
-                    value=self.tokenizer.pad_token_id,
+                    value=PAD_ID,
                 )
                 for output in outputs
             ]
             sample_outputs = torch.vstack(outputs).to(device)
+
+            for i in range(prompt_tensors.shape[0]):
+                for j in range(prompt_tensors.shape[1]):
+                    if prompt_tensors[i, j] == self.tokenizer.pad_token_id:
+                        prompt_tensors[i, j] = PAD_ID
+                    else:
+                        break
 
             if self.config.method.cliprange_reward:
                 scores = torch.clip(scores, -self.config.method.cliprange_reward, self.config.method.cliprange_reward)
@@ -413,7 +447,8 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                         ).logits
             else:
                 all_tokens = torch.cat((prompt_tensors.to(device), sample_outputs), dim=1)
-                attention_mask = all_tokens.not_equal(self.tokenizer.pad_token_id).long().to(device)
+                attention_mask = all_tokens.not_equal(PAD_ID).long().to(device)
+                all_tokens = torch.where(all_tokens == PAD_ID, self.tokenizer.pad_token_id, all_tokens)
                 position_ids = attention_mask.long().cumsum(-1) - 1
                 position_ids.masked_fill_(attention_mask == 0, 1)
                 with torch.no_grad():
